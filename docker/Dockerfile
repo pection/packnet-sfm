@@ -1,6 +1,6 @@
 # Copyright 2020 Toyota Research Institute.  All rights reserved.
 
-FROM nvidia/cuda:10.2-devel-ubuntu18.04
+FROM nvcr.io/nvidia/pytorch:21.02-py3
 
 ENV PROJECT=packnet-sfm
 ENV PYTORCH_VERSION=1.8.1
@@ -22,7 +22,6 @@ SHELL ["/bin/bash", "-cu"]
 RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-packages --no-install-recommends \
     build-essential \
     cmake \
-    g++-4.8 \
     git \
     curl \
     docker.io \
@@ -34,8 +33,6 @@ RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-
     libnccl-dev=${NCCL_VERSION} \
     libjpeg-dev \
     libpng-dev \
-    python${PYTHON_VERSION} \
-    python${PYTHON_VERSION}-dev \
     python3-tk \
     librdmacm1 \
     libibverbs1 \
@@ -47,7 +44,6 @@ RUN apt-get update && apt-get install -y --allow-downgrades --allow-change-held-
     gnuplot \
     ffmpeg
 
-# Install Open MPI
 RUN mkdir /tmp/openmpi && \
     cd /tmp/openmpi && \
     wget https://www.open-mpi.org/software/ompi/v4.0/downloads/openmpi-4.0.0.tar.gz && \
@@ -59,37 +55,18 @@ RUN mkdir /tmp/openmpi && \
     ldconfig && \
     rm -rf /tmp/openmpi
 
-# Install OpenSSH for MPI to communicate between containers
-RUN apt-get install -y --no-install-recommends openssh-client openssh-server && \
-    mkdir -p /var/run/sshd
 
-# Allow OpenSSH to talk to containers without asking for confirmation
-RUN cat /etc/ssh/ssh_config | grep -v StrictHostKeyChecking > /etc/ssh/ssh_config.new && \
-    echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config.new && \
-    mv /etc/ssh/ssh_config.new /etc/ssh/ssh_config
-
-# Instal Python and pip
-RUN if [[ "${PYTHON_VERSION}" == "3.6" ]]; then \
+RUN if [[ "${PYTHON_VERSION}" == "3.8" ]]; then \
     apt-get install -y python${PYTHON_VERSION}-distutils; \
     fi
 
 RUN ln -sf /usr/bin/python${PYTHON_VERSION} /usr/bin/python
 
-RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
-    python get-pip.py && \
-    rm get-pip.py
 
-# Install Pydata and other deps
 RUN pip install future typing numpy pandas matplotlib jupyter h5py \
     awscli boto3 tqdm termcolor path.py pillow-simd opencv-python-headless \
-    mpi4py onnx onnxruntime pycuda yacs cython==0.29.10
+    mpi4py onnx onnxruntime pycuda yacs cython
 
-# Install PyTorch
-RUN pip install torch==${PYTORCH_VERSION} \
-    torchvision==${TORCHVISION_VERSION} && ldconfig
-
-# Install apex
-RUN mkdir /workspace
 WORKDIR /workspace
 RUN git clone https://github.com/NVIDIA/apex.git
 WORKDIR /workspace/apex
