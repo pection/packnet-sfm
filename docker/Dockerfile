@@ -53,19 +53,13 @@ RUN mkdir /tmp/openmpi && \
     make -j $(nproc) all && \
     make install && \
     ldconfig && \
+    cd /workspace && \
     rm -rf /tmp/openmpi
 
 
-RUN if [[ "${PYTHON_VERSION}" == "3.8" ]]; then \
-    apt-get install -y python${PYTHON_VERSION}-distutils; \
-    fi
-
 RUN ln -sf /usr/bin/python${PYTHON_VERSION} /usr/bin/python
 
-
-RUN pip install future typing numpy pandas matplotlib jupyter h5py \
-    awscli boto3 tqdm termcolor path.py pillow-simd opencv-python-headless \
-    mpi4py onnx onnxruntime pycuda yacs cython
+RUN pip install awscli termcolor pillow-simd mpi4py
 
 WORKDIR /workspace
 RUN git clone https://github.com/NVIDIA/apex.git
@@ -74,7 +68,6 @@ RUN pip install -v --no-cache-dir --global-option="--cpp_ext" --global-option="-
 ENV PYTHONPATH="/workspace/apex:$PYTHONPATH"
 WORKDIR /workspace
 
-# install horovod (for distributed training)
 RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     HOROVOD_GPU_ALLREDUCE=NCCL HOROVOD_GPU_BROADCAST=NCCL HOROVOD_WITH_PYTORCH=1 \
     pip install --no-cache-dir git+https://github.com/horovod/horovod.git@${HOROVOD_VERSION} && \
