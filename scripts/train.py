@@ -1,6 +1,9 @@
 # Copyright 2020 Toyota Research Institute.  All rights reserved.
 
 import argparse
+import os
+import sys
+sys.path.append(os.getcwd())
 
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.models.model_checkpoint import ModelCheckpoint

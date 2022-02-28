@@ -292,14 +292,14 @@ class ModelWrapper(torch.nn.Module):
         """Evaluate batch to produce depth metrics."""
         # Get predicted depth
         inv_depths = self.model(batch)['inv_depths']
-        depth = inv2depth(inv_depths[0])
+        depth = inv2depth(inv_depths)
         # Post-process predicted depth
         batch['rgb'] = flip_lr(batch['rgb'])
         if 'input_depth' in batch:
             batch['input_depth'] = flip_lr(batch['input_depth'])
         inv_depths_flipped = self.model(batch)['inv_depths']
         inv_depth_pp = post_process_inv_depth(
-            inv_depths[0], inv_depths_flipped[0], method='mean')
+            inv_depths, inv_depths_flipped, method='mean')
         depth_pp = inv2depth(inv_depth_pp)
         batch['rgb'] = flip_lr(batch['rgb'])
         # Calculate predicted metrics
@@ -355,6 +355,11 @@ class ModelWrapper(torch.nn.Module):
             if len(dataset.cameras[n]) == 1: # only allows single cameras
                 path_line += ' ({})'.format(dataset.cameras[n][0])
             print(wrap(pcolor('*** {:<87}'.format(path_line), 'magenta', attrs=['bold'])))
+            for key,item in metrics.items():
+                print(key, end = ' ')
+                for index in range(4):
+                    print(item[index].item(),end = ' ')
+                print()
             print(hor_line)
             for key, metric in metrics.items():
                 if self.metrics_name in key:

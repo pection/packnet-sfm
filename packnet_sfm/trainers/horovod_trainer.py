@@ -99,6 +99,8 @@ class HorovodTrainer(BaseTrainer):
                 progress_bar.set_description(
                     'Epoch {} | Avg.Loss {:.4f}'.format(
                         module.current_epoch, self.avg_loss(output['loss'].item())))
+        print("Epoch End")
+        print("average loss " + str(self.avg_loss(output['loss'].item())))
         # Return outputs for epoch end
         return module.training_epoch_end(outputs)
 
@@ -122,6 +124,7 @@ class HorovodTrainer(BaseTrainer):
                 outputs.append(output)
             # Append dataset outputs to list of all outputs
             all_outputs.append(outputs)
+        print(all_outputs)
         # Return all outputs for epoch end
         return module.validation_epoch_end(all_outputs)
 
