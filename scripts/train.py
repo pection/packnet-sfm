@@ -49,7 +49,7 @@ def train(file):
         else filter_args_create(WandbLogger, config.wandb)
 
     # model checkpoint
-    checkpoint = None if config.checkpoint.filepath is '' or rank() > 0 else \
+    checkpoint = None if config.checkpoint.filepath == '' or rank() > 0 else \
         filter_args_create(ModelCheckpoint, config.checkpoint)
 
     # Initialize model wrapper

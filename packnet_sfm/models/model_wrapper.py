@@ -54,9 +54,13 @@ class ModelWrapper(torch.nn.Module):
         self.current_epoch = 0
         self.output_dict = {}
         for modes in self.metrics_modes:
-            for keys in self.metrics_keys:
-                self.output_dict["test" + modes + "_" + keys] = []
-                self.output_dict["val" + modes + "_" + keys] = []
+            for keys in range(7):
+                if keys == 0:
+                    self.output_dict["val_" + "depth" + "_" + self.metrics_keys[keys]] = []
+                    self.output_dict["test_" + "depth" + "_" + self.metrics_keys[keys]] = []
+                self.output_dict["val_" + "depth" + modes + "_" + self.metrics_keys[keys]] = []
+                self.output_dict["test_" + "depth" + modes + "_" + self.metrics_keys[keys]] = []
+
         # Prepare model
         self.prepare_model(resume)
 
@@ -136,14 +140,14 @@ class ModelWrapper(torch.nn.Module):
         # Load optimizer
         optimizer = getattr(torch.optim, self.config.model.optimizer.name)
         # Depth optimizer
-        if self.depth_net is not None:
+        if self.depth_net != None:
             params.append({
                 'name': 'Depth',
                 'params': self.depth_net.parameters(),
                 **filter_args(optimizer, self.config.model.optimizer.depth)
             })
         # Pose optimizer
-        if self.pose_net is not None:
+        if self.pose_net != None:
             params.append({
                 'name': 'Pose',
                 'params': self.pose_net.parameters(),
@@ -279,17 +283,17 @@ class ModelWrapper(torch.nn.Module):
 
     def forward(self, *args, **kwargs):
         """Runs the model and returns the output."""
-        assert self.model is not None, 'Model not defined'
+        assert self.model != None, 'Model not defined'
         return self.model(*args, **kwargs)
 
     def depth(self, *args, **kwargs):
         """Runs the pose network and returns the output."""
-        assert self.depth_net is not None, 'Depth network not defined'
+        assert self.depth_net != None, 'Depth network not defined'
         return self.depth_net(*args, **kwargs)
 
     def pose(self, *args, **kwargs):
         """Runs the depth network and returns the output."""
-        assert self.pose_net is not None, 'Pose network not defined'
+        assert self.pose_net != None, 'Pose network not defined'
         return self.pose_net(*args, **kwargs)
 
     def evaluate_depth(self, batch):
@@ -338,10 +342,10 @@ class ModelWrapper(torch.nn.Module):
         print()
         print(hor_line)
 
-        if self.optimizer is not None:
+        if self.optimizer != None:
             bs = 'E: {} BS: {}'.format(self.current_epoch + 1,
                                        self.config.datasets.train.batch_size)
-            if self.model is not None:
+            if self.model != None:
                 bs += ' - {}'.format(self.config.model.name)
             lr = 'LR ({}):'.format(self.config.model.optimizer.name)
             for param in self.optimizer.param_groups:
@@ -359,28 +363,29 @@ class ModelWrapper(torch.nn.Module):
             if len(dataset.cameras[n]) == 1: # only allows single cameras
                 path_line += ' ({})'.format(dataset.cameras[n][0])
             print(wrap(pcolor('*** {:<87}'.format(path_line), 'magenta', attrs=['bold'])))
-            if (isinstance(metrics,dict):
+            if (isinstance(metrics,dict)):
                 if "val" in path_line:
                     print("Dict Val append")
                     for key,item in metrics.items():
-                        print(key, end = ' ')
+                        # print(key, end = ' ')
                         for index in range(7):
-                            print(float("{:.3f}".format(item[index].item())),end = ' ')
-                        print()
+                            self.output_dict["val"+"_"+key+"_"+self.metrics_keys[index]].append(float("{:.3f}".format(item[index].item())))
+                            # print(float("{:.3f}".format(item[index].item())),end = ' ')
                 elif "test" in path_line:
                     print("Dict Test append")
                     for key,item in metrics.items():
-                        print(key, end = ' ')
+                        # print(key, end = ' ')
                         for index in range(7):
-                            print(float("{:.3f}".format(item[index].item())),end = ' ')
-                        print()
+                            self.output_dict["test"+"_"+key+"_"+self.metrics_keys[index]].append(float("{:.3f}".format(item[index].item())))
+                            # self.output_dict["test_" + "depth" + key + "_" + self.metrics_keys[index]].append(float("{:.3f}".format(item[index].item())))
+                            # print(float("{:.3f}".format(item[index].item())),end = ' ')
             print(hor_line)
             for key, metric in metrics.items():
                 if self.metrics_name in key:
                     print(wrap(pcolor(num_line.format(
                         *((key.upper(),) + tuple(metric.tolist()))), 'cyan')))
         print(hor_line)
-
+        print(self.output_dict)
         if self.logger:
             run_line = wrap(pcolor('{:<60}{:>31}'.format(
                 self.config.wandb.url, self.config.wandb.name), 'yellow', attrs=['dark']))
@@ -421,7 +426,7 @@ def setup_depth_net(config, prepared, **kwargs):
         paths=['packnet_sfm.networks.depth',],
         args={**config, **kwargs},
     )
-    if not prepared and config.checkpoint_path is not '':
+    if not prepared and config.checkpoint_path != '':
         depth_net = load_network(depth_net, config.checkpoint_path,
                                  ['depth_net', 'disp_network'])
     return depth_net
@@ -450,7 +455,7 @@ def setup_pose_net(config, prepared, **kwargs):
         paths=['packnet_sfm.networks.pose',],
         args={**config, **kwargs},
     )
-    if not prepared and config.checkpoint_path is not '':
+    if not prepared and config.checkpoint_path != '':
         pose_net = load_network(pose_net, config.checkpoint_path,
                                 ['pose_net', 'pose_network'])
     return pose_net
@@ -484,7 +489,7 @@ def setup_model(config, prepared, **kwargs):
     if 'pose_net' in model.network_requirements:
         model.add_pose_net(setup_pose_net(config.pose_net, prepared))
     # If a checkpoint is provided, load pretrained model
-    if not prepared and config.checkpoint_path is not '':
+    if not prepared and config.checkpoint_path != '':
         model = load_network(model, config.checkpoint_path, 'model')
     # Return model
     return model
