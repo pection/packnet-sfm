@@ -355,11 +355,21 @@ class ModelWrapper(torch.nn.Module):
             if len(dataset.cameras[n]) == 1: # only allows single cameras
                 path_line += ' ({})'.format(dataset.cameras[n][0])
             print(wrap(pcolor('*** {:<87}'.format(path_line), 'magenta', attrs=['bold'])))
-            for key,item in metrics.items():
-                print(key, end = ' ')
-                for index in range(4):
-                    print(item[index].item(),end = ' ')
-                print()
+            if (isinstance(metrics,dict):
+                if "val" in path_line:
+                    print("Dict Val append")
+                    for key,item in metrics.items():
+                        print(key, end = ' ')
+                        for index in range(7):
+                            print(float("{:.3f}".format(item[index].item())),end = ' ')
+                        print()
+                elif "test" in path_line:
+                    print("Dict Test append")
+                    for key,item in metrics.items():
+                        print(key, end = ' ')
+                        for index in range(7):
+                            print(float("{:.3f}".format(item[index].item())),end = ' ')
+                        print()
             print(hor_line)
             for key, metric in metrics.items():
                 if self.metrics_name in key:
