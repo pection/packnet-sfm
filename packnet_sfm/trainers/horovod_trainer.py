@@ -124,7 +124,6 @@ class HorovodTrainer(BaseTrainer):
                 outputs.append(output)
             # Append dataset outputs to list of all outputs
             all_outputs.append(outputs)
-        print(all_outputs)
         # Return all outputs for epoch end
         return module.validation_epoch_end(all_outputs)
 
