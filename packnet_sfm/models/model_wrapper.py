@@ -6,6 +6,8 @@ import time
 import random
 import numpy as np
 import torch
+import csv
+
 from torch.utils.data import ConcatDataset, DataLoader
 
 from packnet_sfm.datasets.transforms import get_transforms
@@ -226,7 +228,7 @@ class ModelWrapper(torch.nn.Module):
         # Calculate and reduce average loss and metrics per GPU
         loss_and_metrics = average_loss_and_metrics(output_batch, 'avg_train')
         loss_and_metrics = reduce_dict(loss_and_metrics, to_item=True)
-
+        # print(loss_and_metrics)
         # Log to wandb
         if self.logger:
             self.logger.log_metrics({
@@ -391,9 +393,8 @@ class ModelWrapper(torch.nn.Module):
                 self.config.wandb.url, self.config.wandb.name), 'yellow', attrs=['dark']))
             print(run_line)
             print(hor_line)
-
-        print()
-
+        print("Writing csv file")
+        writecsvfile("all_outputs.csv",self.output_dict)
 
 def set_random_seed(seed):
     if seed >= 0:
@@ -595,7 +596,19 @@ def get_datasampler(dataset, mode):
     return torch.utils.data.distributed.DistributedSampler(
         dataset, shuffle=(mode=='train'),
         num_replicas=world_size(), rank=rank())
+def writecsvfile(name,dict_data):
+    """
+    Save Python dictionary as csv file
 
+    Parameters
+    ----------
+    name : str
+    dict_data : dict
+
+    """
+    with open(name, 'w') as f:
+        for key in dict_data.keys():
+            f.write("%s,%s\n"%(key,dict_data[key]))
 
 def setup_dataloader(datasets, config, mode):
     """

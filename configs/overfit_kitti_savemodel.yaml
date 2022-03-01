@@ -4,7 +4,7 @@ checkpoint:
     monitor_index: 0
     mode: 'min'
 arch:
-    max_epochs: 3
+    max_epochs: 10
 model:
     name: 'SelfSupModel'
     optimizer:
