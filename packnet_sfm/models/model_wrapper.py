@@ -52,7 +52,11 @@ class ModelWrapper(torch.nn.Module):
         self.model = self.optimizer = self.scheduler = None
         self.train_dataset = self.validation_dataset = self.test_dataset = None
         self.current_epoch = 0
-
+        self.output_dict = {}
+        for modes in self.metrics_modes:
+            for keys in self.metrics_keys:
+                self.output_dict["test" + modes + "_" + keys] = []
+                self.output_dict["val" + modes + "_" + keys] = []
         # Prepare model
         self.prepare_model(resume)
 
