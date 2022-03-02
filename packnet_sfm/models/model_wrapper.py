@@ -11,14 +11,26 @@ import csv
 from torch.utils.data import ConcatDataset, DataLoader
 
 from packnet_sfm.datasets.transforms import get_transforms
-from packnet_sfm.utils.depth import inv2depth, post_process_inv_depth, compute_depth_metrics
+from packnet_sfm.utils.depth import (
+    inv2depth,
+    post_process_inv_depth,
+    compute_depth_metrics,
+)
 from packnet_sfm.utils.horovod import print0, world_size, rank, on_rank_0
 from packnet_sfm.utils.image import flip_lr
-from packnet_sfm.utils.load import load_class, load_class_args_create, \
-    load_network, filter_args
+from packnet_sfm.utils.load import (
+    load_class,
+    load_class_args_create,
+    load_network,
+    filter_args,
+)
 from packnet_sfm.utils.logging import pcolor
-from packnet_sfm.utils.reduce import all_reduce_metrics, reduce_dict, \
-    create_dict, average_loss_and_metrics
+from packnet_sfm.utils.reduce import (
+    all_reduce_metrics,
+    reduce_dict,
+    create_dict,
+    average_loss_and_metrics,
+)
 from packnet_sfm.utils.save import save_depth
 from packnet_sfm.models.model_utils import stack_batch
 
@@ -46,9 +58,9 @@ class ModelWrapper(torch.nn.Module):
         set_random_seed(config.arch.seed)
 
         # Task metrics
-        self.metrics_name = 'depth'
-        self.metrics_keys = ('abs_rel', 'sqr_rel', 'rmse', 'rmse_log', 'a1', 'a2', 'a3')
-        self.metrics_modes = ('', '_pp', '_gt', '_pp_gt')
+        self.metrics_name = "depth"
+        self.metrics_keys = ("abs_rel", "sqr_rel", "rmse", "rmse_log", "a1", "a2", "a3")
+        self.metrics_modes = ("", "_pp", "_gt", "_pp_gt")
 
         # Model, optimizers, schedulers and datasets are None for now
         self.model = self.optimizer = self.scheduler = None
@@ -58,10 +70,18 @@ class ModelWrapper(torch.nn.Module):
         for modes in self.metrics_modes:
             for keys in range(7):
                 if keys == 0:
-                    self.output_dict["val_" + "depth" + "_" + self.metrics_keys[keys]] = []
-                    self.output_dict["test_" + "depth" + "_" + self.metrics_keys[keys]] = []
-                self.output_dict["val_" + "depth" + modes + "_" + self.metrics_keys[keys]] = []
-                self.output_dict["test_" + "depth" + modes + "_" + self.metrics_keys[keys]] = []
+                    self.output_dict[
+                        "val_" + "depth" + "_" + self.metrics_keys[keys]
+                    ] = []
+                    self.output_dict[
+                        "test_" + "depth" + "_" + self.metrics_keys[keys]
+                    ] = []
+                self.output_dict[
+                    "val_" + "depth" + modes + "_" + self.metrics_keys[keys]
+                ] = []
+                self.output_dict[
+                    "test_" + "depth" + modes + "_" + self.metrics_keys[keys]
+                ] = []
 
         # Prepare model
         self.prepare_model(resume)
@@ -69,7 +89,7 @@ class ModelWrapper(torch.nn.Module):
         # Prepare datasets
         if load_datasets:
             # Requirements for validation (we only evaluate depth for now)
-            validation_requirements = {'gt_depth': True, 'gt_pose': False}
+            validation_requirements = {"gt_depth": True, "gt_pose": False}
             test_requirements = validation_requirements
             self.prepare_datasets(validation_requirements, test_requirements)
 
@@ -78,35 +98,45 @@ class ModelWrapper(torch.nn.Module):
 
     def prepare_model(self, resume=None):
         """Prepare self.model (incl. loading previous state)"""
-        print0(pcolor('### Preparing Model', 'green'))
+        print0(pcolor("### Preparing Model", "green"))
         self.model = setup_model(self.config.model, self.config.prepared)
         # Resume model if available
         if resume:
-            print0(pcolor('### Resuming from {}'.format(
-                resume['file']), 'magenta', attrs=['bold']))
-            self.model = load_network(
-                self.model, resume['state_dict'], 'model')
-            if 'epoch' in resume:
-                self.current_epoch = resume['epoch']
+            print0(
+                pcolor(
+                    "### Resuming from {}".format(resume["file"]),
+                    "magenta",
+                    attrs=["bold"],
+                )
+            )
+            self.model = load_network(self.model, resume["state_dict"], "model")
+            if "epoch" in resume:
+                self.current_epoch = resume["epoch"]
 
     def prepare_datasets(self, validation_requirements, test_requirements):
         """Prepare datasets for training, validation and test."""
         # Prepare datasets
-        print0(pcolor('### Preparing Datasets', 'green'))
+        print0(pcolor("### Preparing Datasets", "green"))
 
         augmentation = self.config.datasets.augmentation
         # Setup train dataset (requirements are given by the model itself)
         self.train_dataset = setup_dataset(
-            self.config.datasets.train, 'train',
-            self.model.train_requirements, **augmentation)
+            self.config.datasets.train,
+            "train",
+            self.model.train_requirements,
+            **augmentation,
+        )
         # Setup validation dataset
         self.validation_dataset = setup_dataset(
-            self.config.datasets.validation, 'validation',
-            validation_requirements, **augmentation)
+            self.config.datasets.validation,
+            "validation",
+            validation_requirements,
+            **augmentation,
+        )
         # Setup test dataset
         self.test_dataset = setup_dataset(
-            self.config.datasets.test, 'test',
-            test_requirements, **augmentation)
+            self.config.datasets.test, "test", test_requirements, **augmentation
+        )
 
     @property
     def depth_net(self):
@@ -123,8 +153,8 @@ class ModelWrapper(torch.nn.Module):
         """Returns various logs for tracking."""
         params = OrderedDict()
         for param in self.optimizer.param_groups:
-            params['{}_learning_rate'.format(param['name'].lower())] = param['lr']
-        params['progress'] = self.progress
+            params["{}_learning_rate".format(param["name"].lower())] = param["lr"]
+        params["progress"] = self.progress
         return {
             **params,
             **self.model.logs,
@@ -143,30 +173,36 @@ class ModelWrapper(torch.nn.Module):
         optimizer = getattr(torch.optim, self.config.model.optimizer.name)
         # Depth optimizer
         if self.depth_net != None:
-            params.append({
-                'name': 'Depth',
-                'params': self.depth_net.parameters(),
-                **filter_args(optimizer, self.config.model.optimizer.depth)
-            })
+            params.append(
+                {
+                    "name": "Depth",
+                    "params": self.depth_net.parameters(),
+                    **filter_args(optimizer, self.config.model.optimizer.depth),
+                }
+            )
         # Pose optimizer
         if self.pose_net != None:
-            params.append({
-                'name': 'Pose',
-                'params': self.pose_net.parameters(),
-                **filter_args(optimizer, self.config.model.optimizer.pose)
-            })
+            params.append(
+                {
+                    "name": "Pose",
+                    "params": self.pose_net.parameters(),
+                    **filter_args(optimizer, self.config.model.optimizer.pose),
+                }
+            )
         # Create optimizer with parameters
         optimizer = optimizer(params)
 
         # Load and initialize scheduler
         scheduler = getattr(torch.optim.lr_scheduler, self.config.model.scheduler.name)
-        scheduler = scheduler(optimizer, **filter_args(scheduler, self.config.model.scheduler))
+        scheduler = scheduler(
+            optimizer, **filter_args(scheduler, self.config.model.scheduler)
+        )
 
         if self.resume:
-            if 'optimizer' in self.resume:
-                optimizer.load_state_dict(self.resume['optimizer'])
-            if 'scheduler' in self.resume:
-                scheduler.load_state_dict(self.resume['scheduler'])
+            if "optimizer" in self.resume:
+                optimizer.load_state_dict(self.resume["optimizer"])
+            if "scheduler" in self.resume:
+                scheduler.load_state_dict(self.resume["scheduler"])
 
         # Create class variables so we can use it internally
         self.optimizer = optimizer
@@ -177,154 +213,164 @@ class ModelWrapper(torch.nn.Module):
 
     def train_dataloader(self):
         """Prepare training dataloader."""
-        return setup_dataloader(self.train_dataset,
-                                self.config.datasets.train, 'train')[0]
+        return setup_dataloader(
+            self.train_dataset, self.config.datasets.train, "train"
+        )[0]
 
     def val_dataloader(self):
         """Prepare validation dataloader."""
-        return setup_dataloader(self.validation_dataset,
-                                self.config.datasets.validation, 'validation')
+        return setup_dataloader(
+            self.validation_dataset, self.config.datasets.validation, "validation"
+        )
 
     def test_dataloader(self):
         """Prepare test dataloader."""
-        return setup_dataloader(self.test_dataset,
-                                self.config.datasets.test, 'test')
+        return setup_dataloader(self.test_dataset, self.config.datasets.test, "test")
 
     def training_step(self, batch, *args):
         """Processes a training batch."""
         batch = stack_batch(batch)
         output = self.model(batch, progress=self.progress)
-        return {
-            'loss': output['loss'],
-            'metrics': output['metrics']
-        }
+        return {"loss": output["loss"], "metrics": output["metrics"]}
 
     def validation_step(self, batch, *args):
         """Processes a validation batch."""
         output = self.evaluate_depth(batch)
         if self.logger:
-            self.logger.log_depth('val', batch, output, args,
-                                  self.validation_dataset, world_size(),
-                                  self.config.datasets.validation)
+            self.logger.log_depth(
+                "val",
+                batch,
+                output,
+                args,
+                self.validation_dataset,
+                world_size(),
+                self.config.datasets.validation,
+            )
         return {
-            'idx': batch['idx'],
-            **output['metrics'],
+            "idx": batch["idx"],
+            **output["metrics"],
         }
 
     def test_step(self, batch, *args):
         """Processes a test batch."""
         output = self.evaluate_depth(batch)
-        save_depth(batch, output, args,
-                   self.config.datasets.test,
-                   self.config.save)
+        save_depth(batch, output, args, self.config.datasets.test, self.config.save)
         return {
-            'idx': batch['idx'],
-            **output['metrics'],
+            "idx": batch["idx"],
+            **output["metrics"],
         }
 
     def training_epoch_end(self, output_batch):
         """Finishes a training epoch."""
 
         # Calculate and reduce average loss and metrics per GPU
-        loss_and_metrics = average_loss_and_metrics(output_batch, 'avg_train')
+        loss_and_metrics = average_loss_and_metrics(output_batch, "avg_train")
         loss_and_metrics = reduce_dict(loss_and_metrics, to_item=True)
-        # print(loss_and_metrics)
+        print(loss_and_metrics)
         # Log to wandb
         if self.logger:
-            self.logger.log_metrics({
-                **self.logs, **loss_and_metrics,
-            })
+            self.logger.log_metrics(
+                {
+                    **self.logs,
+                    **loss_and_metrics,
+                }
+            )
 
-        return {
-            **loss_and_metrics
-        }
+        return {**loss_and_metrics}
 
     def validation_epoch_end(self, output_data_batch):
         """Finishes a validation epoch."""
 
         # Reduce depth metrics
         metrics_data = all_reduce_metrics(
-            output_data_batch, self.validation_dataset, self.metrics_name)
+            output_data_batch, self.validation_dataset, self.metrics_name
+        )
 
         # Create depth dictionary
         metrics_dict = create_dict(
-            metrics_data, self.metrics_keys, self.metrics_modes,
-            self.config.datasets.validation)
+            metrics_data,
+            self.metrics_keys,
+            self.metrics_modes,
+            self.config.datasets.validation,
+        )
 
         # Print stuff
         self.print_metrics(metrics_data, self.config.datasets.validation)
 
         # Log to wandb
         if self.logger:
-            self.logger.log_metrics({
-                **metrics_dict, 'global_step': self.current_epoch + 1,
-            })
+            self.logger.log_metrics(
+                {
+                    **metrics_dict,
+                    "global_step": self.current_epoch + 1,
+                }
+            )
 
-        return {
-            **metrics_dict
-        }
+        return {**metrics_dict}
 
     def test_epoch_end(self, output_data_batch):
         """Finishes a test epoch."""
 
         # Reduce depth metrics
         metrics_data = all_reduce_metrics(
-            output_data_batch, self.test_dataset, self.metrics_name)
+            output_data_batch, self.test_dataset, self.metrics_name
+        )
 
         # Create depth dictionary
         metrics_dict = create_dict(
-            metrics_data, self.metrics_keys, self.metrics_modes,
-            self.config.datasets.test)
+            metrics_data,
+            self.metrics_keys,
+            self.metrics_modes,
+            self.config.datasets.test,
+        )
 
         # Print stuff
         self.print_metrics(metrics_data, self.config.datasets.test)
 
-        return {
-            **metrics_dict
-        }
+        return {**metrics_dict}
 
     def forward(self, *args, **kwargs):
         """Runs the model and returns the output."""
-        assert self.model != None, 'Model not defined'
+        assert self.model != None, "Model not defined"
         return self.model(*args, **kwargs)
 
     def depth(self, *args, **kwargs):
         """Runs the pose network and returns the output."""
-        assert self.depth_net != None, 'Depth network not defined'
+        assert self.depth_net != None, "Depth network not defined"
         return self.depth_net(*args, **kwargs)
 
     def pose(self, *args, **kwargs):
         """Runs the depth network and returns the output."""
-        assert self.pose_net != None, 'Pose network not defined'
+        assert self.pose_net != None, "Pose network not defined"
         return self.pose_net(*args, **kwargs)
 
     def evaluate_depth(self, batch):
         """Evaluate batch to produce depth metrics."""
         # Get predicted depth
-        inv_depths = self.model(batch)['inv_depths']
+        inv_depths = self.model(batch)["inv_depths"]
         depth = inv2depth(inv_depths)
         # Post-process predicted depth
-        batch['rgb'] = flip_lr(batch['rgb'])
-        if 'input_depth' in batch:
-            batch['input_depth'] = flip_lr(batch['input_depth'])
-        inv_depths_flipped = self.model(batch)['inv_depths']
+        batch["rgb"] = flip_lr(batch["rgb"])
+        if "input_depth" in batch:
+            batch["input_depth"] = flip_lr(batch["input_depth"])
+        inv_depths_flipped = self.model(batch)["inv_depths"]
         inv_depth_pp = post_process_inv_depth(
-            inv_depths, inv_depths_flipped, method='mean')
+            inv_depths, inv_depths_flipped, method="mean"
+        )
         depth_pp = inv2depth(inv_depth_pp)
-        batch['rgb'] = flip_lr(batch['rgb'])
+        batch["rgb"] = flip_lr(batch["rgb"])
         # Calculate predicted metrics
         metrics = OrderedDict()
-        if 'depth' in batch:
+        if "depth" in batch:
             for mode in self.metrics_modes:
                 metrics[self.metrics_name + mode] = compute_depth_metrics(
-                    self.config.model.params, gt=batch['depth'],
-                    pred=depth_pp if 'pp' in mode else depth,
-                    use_gt_scale='gt' in mode)
+                    self.config.model.params,
+                    gt=batch["depth"],
+                    pred=depth_pp if "pp" in mode else depth,
+                    use_gt_scale="gt" in mode,
+                )
         # Return metrics and extra information
-        return {
-            'metrics': metrics,
-            'inv_depth': inv_depth_pp
-        }
+        return {"metrics": metrics, "inv_depth": inv_depth_pp}
 
     @on_rank_0
     def print_metrics(self, metrics_data, dataset):
@@ -332,12 +378,12 @@ class ModelWrapper(torch.nn.Module):
         if not metrics_data[0]:
             return
 
-        hor_line = '|{:<}|'.format('*' * 93)
-        met_line = '| {:^14} | {:^8} | {:^8} | {:^8} | {:^8} | {:^8} | {:^8} | {:^8} |'
-        num_line = '{:<14} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f}'
+        hor_line = "|{:<}|".format("*" * 93)
+        met_line = "| {:^14} | {:^8} | {:^8} | {:^8} | {:^8} | {:^8} | {:^8} | {:^8} |"
+        num_line = "{:<14} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f} | {:^8.3f}"
 
         def wrap(string):
-            return '| {} |'.format(string)
+            return "| {} |".format(string)
 
         print()
         print()
@@ -345,56 +391,79 @@ class ModelWrapper(torch.nn.Module):
         print(hor_line)
 
         if self.optimizer != None:
-            bs = 'E: {} BS: {}'.format(self.current_epoch + 1,
-                                       self.config.datasets.train.batch_size)
+            bs = "E: {} BS: {}".format(
+                self.current_epoch + 1, self.config.datasets.train.batch_size
+            )
             if self.model != None:
-                bs += ' - {}'.format(self.config.model.name)
-            lr = 'LR ({}):'.format(self.config.model.optimizer.name)
+                bs += " - {}".format(self.config.model.name)
+            lr = "LR ({}):".format(self.config.model.optimizer.name)
             for param in self.optimizer.param_groups:
-                lr += ' {} {:.2e}'.format(param['name'], param['lr'])
-            par_line = wrap(pcolor('{:<40}{:>51}'.format(bs, lr),
-                                   'green', attrs=['bold', 'dark']))
+                lr += " {} {:.2e}".format(param["name"], param["lr"])
+            par_line = wrap(
+                pcolor("{:<40}{:>51}".format(bs, lr), "green", attrs=["bold", "dark"])
+            )
             print(par_line)
             print(hor_line)
 
-        print(met_line.format(*(('METRIC',) + self.metrics_keys)))
+        print(met_line.format(*(("METRIC",) + self.metrics_keys)))
         for n, metrics in enumerate(metrics_data):
             print(hor_line)
-            path_line = '{}'.format(
-                os.path.join(dataset.path[n], dataset.split[n]))
-            if len(dataset.cameras[n]) == 1: # only allows single cameras
-                path_line += ' ({})'.format(dataset.cameras[n][0])
-            print(wrap(pcolor('*** {:<87}'.format(path_line), 'magenta', attrs=['bold'])))
-            if (isinstance(metrics,dict)):
+            path_line = "{}".format(os.path.join(dataset.path[n], dataset.split[n]))
+            if len(dataset.cameras[n]) == 1:  # only allows single cameras
+                path_line += " ({})".format(dataset.cameras[n][0])
+            print(
+                wrap(pcolor("*** {:<87}".format(path_line), "magenta", attrs=["bold"]))
+            )
+            if isinstance(metrics, dict):
                 if "val" in path_line:
                     print("Dict Val append")
-                    for key,item in metrics.items():
+                    for key, item in metrics.items():
                         # print(key, end = ' ')
                         for index in range(7):
-                            self.output_dict["val"+"_"+key+"_"+self.metrics_keys[index]].append(float("{:.3f}".format(item[index].item())))
+                            self.output_dict[
+                                "val" + "_" + key + "_" + self.metrics_keys[index]
+                            ].append(float("{:.3f}".format(item[index].item())))
                             # print(float("{:.3f}".format(item[index].item())),end = ' ')
                 elif "test" in path_line:
                     print("Dict Test append")
-                    for key,item in metrics.items():
+                    for key, item in metrics.items():
                         # print(key, end = ' ')
                         for index in range(7):
-                            self.output_dict["test"+"_"+key+"_"+self.metrics_keys[index]].append(float("{:.3f}".format(item[index].item())))
+                            self.output_dict[
+                                "test" + "_" + key + "_" + self.metrics_keys[index]
+                            ].append(float("{:.3f}".format(item[index].item())))
                             # self.output_dict["test_" + "depth" + key + "_" + self.metrics_keys[index]].append(float("{:.3f}".format(item[index].item())))
                             # print(float("{:.3f}".format(item[index].item())),end = ' ')
             print(hor_line)
             for key, metric in metrics.items():
                 if self.metrics_name in key:
-                    print(wrap(pcolor(num_line.format(
-                        *((key.upper(),) + tuple(metric.tolist()))), 'cyan')))
+                    print(
+                        wrap(
+                            pcolor(
+                                num_line.format(
+                                    *((key.upper(),) + tuple(metric.tolist()))
+                                ),
+                                "cyan",
+                            )
+                        )
+                    )
         print(hor_line)
         print(self.output_dict)
         if self.logger:
-            run_line = wrap(pcolor('{:<60}{:>31}'.format(
-                self.config.wandb.url, self.config.wandb.name), 'yellow', attrs=['dark']))
+            run_line = wrap(
+                pcolor(
+                    "{:<60}{:>31}".format(
+                        self.config.wandb.url, self.config.wandb.name
+                    ),
+                    "yellow",
+                    attrs=["dark"],
+                )
+            )
             print(run_line)
             print(hor_line)
         print("Writing csv file")
-        writecsvfile("all_outputs.csv",self.output_dict)
+        writecsvfile("all_outputs.csv", self.output_dict)
+
 
 def set_random_seed(seed):
     if seed >= 0:
@@ -422,14 +491,18 @@ def setup_depth_net(config, prepared, **kwargs):
     depth_net : nn.Module
         Create depth network
     """
-    print0(pcolor('DepthNet: %s' % config.name, 'yellow'))
-    depth_net = load_class_args_create(config.name,
-        paths=['packnet_sfm.networks.depth',],
+    print0(pcolor("DepthNet: %s" % config.name, "yellow"))
+    depth_net = load_class_args_create(
+        config.name,
+        paths=[
+            "packnet_sfm.networks.depth",
+        ],
         args={**config, **kwargs},
     )
-    if not prepared and config.checkpoint_path != '':
-        depth_net = load_network(depth_net, config.checkpoint_path,
-                                 ['depth_net', 'disp_network'])
+    if not prepared and config.checkpoint_path != "":
+        depth_net = load_network(
+            depth_net, config.checkpoint_path, ["depth_net", "disp_network"]
+        )
     return depth_net
 
 
@@ -451,14 +524,18 @@ def setup_pose_net(config, prepared, **kwargs):
     pose_net : nn.Module
         Created pose network
     """
-    print0(pcolor('PoseNet: %s' % config.name, 'yellow'))
-    pose_net = load_class_args_create(config.name,
-        paths=['packnet_sfm.networks.pose',],
+    print0(pcolor("PoseNet: %s" % config.name, "yellow"))
+    pose_net = load_class_args_create(
+        config.name,
+        paths=[
+            "packnet_sfm.networks.pose",
+        ],
         args={**config, **kwargs},
     )
-    if not prepared and config.checkpoint_path != '':
-        pose_net = load_network(pose_net, config.checkpoint_path,
-                                ['pose_net', 'pose_network'])
+    if not prepared and config.checkpoint_path != "":
+        pose_net = load_network(
+            pose_net, config.checkpoint_path, ["pose_net", "pose_network"]
+        )
     return pose_net
 
 
@@ -480,18 +557,22 @@ def setup_model(config, prepared, **kwargs):
     model : nn.Module
         Created model
     """
-    print0(pcolor('Model: %s' % config.name, 'yellow'))
-    model = load_class(config.name, paths=['packnet_sfm.models',])(
-        **{**config.loss, **kwargs})
+    print0(pcolor("Model: %s" % config.name, "yellow"))
+    model = load_class(
+        config.name,
+        paths=[
+            "packnet_sfm.models",
+        ],
+    )(**{**config.loss, **kwargs})
     # Add depth network if required
-    if 'depth_net' in model.network_requirements:
+    if "depth_net" in model.network_requirements:
         model.add_depth_net(setup_depth_net(config.depth_net, prepared))
     # Add pose network if required
-    if 'pose_net' in model.network_requirements:
+    if "pose_net" in model.network_requirements:
         model.add_pose_net(setup_pose_net(config.pose_net, prepared))
     # If a checkpoint is provided, load pretrained model
-    if not prepared and config.checkpoint_path != '':
-        model = load_network(model, config.checkpoint_path, 'model')
+    if not prepared and config.checkpoint_path != "":
+        model = load_network(model, config.checkpoint_path, "model")
     # Return model
     return model
 
@@ -520,13 +601,13 @@ def setup_dataset(config, mode, requirements, **kwargs):
     if len(config.path) == 0:
         return None
 
-    print0(pcolor('###### Setup %s datasets' % mode, 'red'))
+    print0(pcolor("###### Setup %s datasets" % mode, "red"))
 
     # Global shared dataset arguments
     dataset_args = {
-        'back_context': config.back_context,
-        'forward_context': config.forward_context,
-        'data_transform': get_transforms(mode, **kwargs)
+        "back_context": config.back_context,
+        "forward_context": config.forward_context,
+        "data_transform": get_transforms(mode, **kwargs),
     }
 
     # Loop over all datasets
@@ -536,50 +617,61 @@ def setup_dataset(config, mode, requirements, **kwargs):
 
         # Individual shared dataset arguments
         dataset_args_i = {
-            'depth_type': config.depth_type[i] if 'gt_depth' in requirements else None,
-            'input_depth_type': config.input_depth_type[i] if 'gt_depth' in requirements else None,
-            'with_pose': 'gt_pose' in requirements,
+            "depth_type": config.depth_type[i] if "gt_depth" in requirements else None,
+            "input_depth_type": config.input_depth_type[i]
+            if "gt_depth" in requirements
+            else None,
+            "with_pose": "gt_pose" in requirements,
         }
 
         # KITTI dataset
-        if config.dataset[i] == 'KITTI':
+        if config.dataset[i] == "KITTI":
             from packnet_sfm.datasets.kitti_dataset import KITTIDataset
+
             dataset = KITTIDataset(
-                config.path[i], path_split,
-                **dataset_args, **dataset_args_i,
+                config.path[i],
+                path_split,
+                **dataset_args,
+                **dataset_args_i,
             )
         # DGP dataset
-        elif config.dataset[i] == 'DGP':
+        elif config.dataset[i] == "DGP":
             from packnet_sfm.datasets.dgp_dataset import DGPDataset
+
             dataset = DGPDataset(
-                config.path[i], config.split[i],
-                **dataset_args, **dataset_args_i,
+                config.path[i],
+                config.split[i],
+                **dataset_args,
+                **dataset_args_i,
                 cameras=config.cameras[i],
             )
         # Image dataset
-        elif config.dataset[i] == 'Image':
+        elif config.dataset[i] == "Image":
             from packnet_sfm.datasets.image_dataset import ImageDataset
+
             dataset = ImageDataset(
-                config.path[i], config.split[i],
-                **dataset_args, **dataset_args_i,
+                config.path[i],
+                config.split[i],
+                **dataset_args,
+                **dataset_args_i,
             )
         else:
-            ValueError('Unknown dataset %d' % config.dataset[i])
+            ValueError("Unknown dataset %d" % config.dataset[i])
 
         # Repeat if needed
-        if 'repeat' in config and config.repeat[i] > 1:
+        if "repeat" in config and config.repeat[i] > 1:
             dataset = ConcatDataset([dataset for _ in range(config.repeat[i])])
         datasets.append(dataset)
 
         # Display dataset information
-        bar = '######### {:>7}'.format(len(dataset))
-        if 'repeat' in config:
-            bar += ' (x{})'.format(config.repeat[i])
-        bar += ': {:<}'.format(path_split)
-        print0(pcolor(bar, 'yellow'))
+        bar = "######### {:>7}".format(len(dataset))
+        if "repeat" in config:
+            bar += " (x{})".format(config.repeat[i])
+        bar += ": {:<}".format(path_split)
+        print0(pcolor(bar, "yellow"))
 
     # If training, concatenate all datasets into a single one
-    if mode == 'train':
+    if mode == "train":
         datasets = [ConcatDataset(datasets)]
 
     return datasets
@@ -594,9 +686,11 @@ def worker_init_fn(worker_id):
 def get_datasampler(dataset, mode):
     """Distributed data sampler"""
     return torch.utils.data.distributed.DistributedSampler(
-        dataset, shuffle=(mode=='train'),
-        num_replicas=world_size(), rank=rank())
-def writecsvfile(name,dict_data):
+        dataset, shuffle=(mode == "train"), num_replicas=world_size(), rank=rank()
+    )
+
+
+def writecsvfile(name, mydict):
     """
     Save Python dictionary as csv file
 
@@ -606,9 +700,15 @@ def writecsvfile(name,dict_data):
     dict_data : dict
 
     """
-    with open(name, 'w') as f:
-        for key in dict_data.keys():
-            f.write("%s,%s\n"%(key,dict_data[key]))
+    with open(name, "w") as csv_file:
+        writer = csv.writer(csv_file)
+        for key, value in mydict.items():
+            writer.writerow([key, value])
+
+    # with open(name, 'w') as f:
+    #     for key in dict_data.keys():
+    #         f.write("%s,%s\n"%(key,dict_data[key]))
+
 
 def setup_dataloader(datasets, config, mode):
     """
@@ -628,9 +728,17 @@ def setup_dataloader(datasets, config, mode):
     dataloaders : list of Dataloader
         List of created dataloaders for each input dataset
     """
-    return [(DataLoader(dataset,
-                        batch_size=config.batch_size, shuffle=False,
-                        pin_memory=True, num_workers=config.num_workers,
-                        worker_init_fn=worker_init_fn,
-                        sampler=get_datasampler(dataset, mode))
-             ) for dataset in datasets]
+    return [
+        (
+            DataLoader(
+                dataset,
+                batch_size=config.batch_size,
+                shuffle=False,
+                pin_memory=True,
+                num_workers=config.num_workers,
+                worker_init_fn=worker_init_fn,
+                sampler=get_datasampler(dataset, mode),
+            )
+        )
+        for dataset in datasets
+    ]
