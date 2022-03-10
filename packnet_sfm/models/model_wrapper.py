@@ -31,6 +31,7 @@ from packnet_sfm.utils.reduce import (
 )
 from packnet_sfm.utils.save import save_depth
 from packnet_sfm.models.model_utils import stack_batch
+from packnet_sfm.trainers.horovod_trainer import HorovodTrainer
 
 
 class ModelWrapper(torch.nn.Module):
@@ -264,7 +265,7 @@ class ModelWrapper(torch.nn.Module):
         # Calculate and reduce average loss and metrics per GPU
         loss_and_metrics = average_loss_and_metrics(output_batch, "avg_train")
         loss_and_metrics = reduce_dict(loss_and_metrics, to_item=True)
-        print(loss_and_metrics)
+        # print(loss_and_metrics)
         # Log to wandb
         if self.logger:
             self.logger.log_metrics(
@@ -459,6 +460,8 @@ class ModelWrapper(torch.nn.Module):
             )
             print(run_line)
             print(hor_line)
+        mike = HorovodTrainer()
+        print(mike.get_avg())
         print("Writing csv file")
         writecsvfile("all_outputs.csv", self.output_dict)
 
@@ -702,7 +705,6 @@ def writecsvfile(name, mydict):
         writer = csv.writer(csv_file)
         for key, value in mydict.items():
             writer.writerow([key, value])
-
     # with open(name, 'w') as f:
     #     for key in dict_data.keys():
     #         f.write("%s,%s\n"%(key,dict_data[key]))

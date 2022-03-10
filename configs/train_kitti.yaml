@@ -1,3 +1,8 @@
+checkpoint:
+    filepath: '/data/experiments'
+    monitor: 'abs_rel_pp_gt'
+    monitor_index: 0
+    mode: 'min'
 model:
     name: 'SelfSupModel'
     optimizer:

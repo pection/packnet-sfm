@@ -38,14 +38,17 @@ class HorovodTrainer(BaseTrainer):
         print_config(module.config)
 
         # Send module to GPU
-        module = module.to('cuda')
+        module = module.to("cuda")
         # Configure optimizer and scheduler
         module.configure_optimizers()
 
         # Create distributed optimizer
         compression = hvd.Compression.none
-        optimizer = hvd.DistributedOptimizer(module.optimizer,
-            named_parameters=module.named_parameters(), compression=compression)
+        optimizer = hvd.DistributedOptimizer(
+            module.optimizer,
+            named_parameters=module.named_parameters(),
+            compression=compression,
+        )
         scheduler = module.scheduler
 
         # Get train and val dataloaders
@@ -77,8 +80,7 @@ class HorovodTrainer(BaseTrainer):
         if hasattr(dataloader.sampler, "set_epoch"):
             dataloader.sampler.set_epoch(module.current_epoch)
         # Prepare progress bar
-        progress_bar = self.train_progress_bar(
-            dataloader, module.config.datasets.train)
+        progress_bar = self.train_progress_bar(dataloader, module.config.datasets.train)
         # Start training loop
         outputs = []
         # For all batches
@@ -89,20 +91,26 @@ class HorovodTrainer(BaseTrainer):
             batch = sample_to_cuda(batch)
             output = module.training_step(batch, i)
             # Backprop through loss and take an optimizer step
-            output['loss'].backward()
+            output["loss"].backward()
             optimizer.step()
             # Append output to list of outputs
-            output['loss'] = output['loss'].detach()
+            output["loss"] = output["loss"].detach()
             outputs.append(output)
             # Update progress bar if in rank 0
             if self.is_rank_0:
                 progress_bar.set_description(
-                    'Epoch {} | Avg.Loss {:.4f}'.format(
-                        module.current_epoch, self.avg_loss(output['loss'].item())))
+                    "Epoch {} | Avg.Loss {:.4f}".format(
+                        module.current_epoch, self.avg_loss(output["loss"].item())
+                    )
+                )
         print("Epoch End")
-        print("average loss " + str(self.avg_loss(output['loss'].item())))
+        print("average loss " + str(self.avg_loss(output["loss"].item())))
+        # print(ModelWrapper.output_dict)
         # Return outputs for epoch end
         return module.training_epoch_end(outputs)
+
+    def get_avg(self):
+        return "average loss " + str(self.avg_loss())
 
     def validate(self, dataloaders, module):
         # Set module to eval
@@ -113,7 +121,8 @@ class HorovodTrainer(BaseTrainer):
         for n, dataloader in enumerate(dataloaders):
             # Prepare progress bar for that dataset
             progress_bar = self.val_progress_bar(
-                dataloader, module.config.datasets.validation, n)
+                dataloader, module.config.datasets.validation, n
+            )
             outputs = []
             # For all batches
             for i, batch in progress_bar:
@@ -129,7 +138,7 @@ class HorovodTrainer(BaseTrainer):
 
     def test(self, module):
         # Send module to GPU
-        module = module.to('cuda', dtype=self.dtype)
+        module = module.to("cuda", dtype=self.dtype)
         # Get test dataloaders
         test_dataloaders = module.test_dataloader()
         # Run evaluation
@@ -145,7 +154,8 @@ class HorovodTrainer(BaseTrainer):
         for n, dataloader in enumerate(dataloaders):
             # Prepare progress bar for that dataset
             progress_bar = self.val_progress_bar(
-                dataloader, module.config.datasets.test, n)
+                dataloader, module.config.datasets.test, n
+            )
             outputs = []
             # For all batches
             for i, batch in progress_bar:
