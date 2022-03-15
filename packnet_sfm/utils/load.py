@@ -26,8 +26,8 @@ def set_debug(debug):
     """
     # Disable logging if requested
     if not debug:
-        os.environ['NCCL_DEBUG'] = ''
-        os.environ['WANDB_SILENT'] = 'false'
+        os.environ["NCCL_DEBUG"] = ""
+        os.environ["WANDB_SILENT"] = "false"
         warnings.filterwarnings("ignore")
         logging.disable(logging.CRITICAL)
 
@@ -98,11 +98,11 @@ def load_class(filename, paths, concat=True):
     # for each path in paths
     for path in make_list(paths):
         # Create full path
-        full_path = '{}.{}'.format(path, filename) if concat else path
+        full_path = "{}.{}".format(path, filename) if concat else path
         if importlib.util.find_spec(full_path):
             # Return method with same name as the file
             return getattr(importlib.import_module(full_path), filename)
-    raise ValueError('Unknown class {}'.format(filename))
+    raise ValueError("Unknown class {}".format(filename))
 
 
 def load_class_args_create(filename, paths, args={}, concat=True):
@@ -111,7 +111,7 @@ def load_class_args_create(filename, paths, args={}, concat=True):
     return filter_args_create(class_type, args)
 
 
-def load_network(network, path, prefixes=''):
+def load_network(network, path, prefixes=""):
     """
     Loads a pretrained network
 
@@ -132,8 +132,8 @@ def load_network(network, path, prefixes=''):
     prefixes = make_list(prefixes)
     # If path is a string
     if is_str(path):
-        saved_state_dict = torch.load(path, map_location='cpu')['state_dict']
-        if path.endswith('.pth.tar'):
+        saved_state_dict = torch.load(path, map_location="cpu")["state_dict"]
+        if path.endswith(".pth.tar"):
             saved_state_dict = backwards_state_dict(saved_state_dict)
     # If state dict is already provided
     else:
@@ -145,21 +145,26 @@ def load_network(network, path, prefixes=''):
     n, n_total = 0, len(network_state_dict.keys())
     for key, val in saved_state_dict.items():
         for prefix in prefixes:
-            prefix = prefix + '.'
+            prefix = prefix + "."
             if prefix in key:
                 idx = key.find(prefix) + len(prefix)
                 key = key[idx:]
-                if key in network_state_dict.keys() and \
-                        same_shape(val.shape, network_state_dict[key].shape):
+                if key in network_state_dict.keys() and same_shape(
+                    val.shape, network_state_dict[key].shape
+                ):
                     updated_state_dict[key] = val
                     n += 1
 
     network.load_state_dict(updated_state_dict, strict=False)
-    base_color, attrs = 'cyan', ['bold', 'dark']
-    color = 'green' if n == n_total else 'yellow' if n > 0 else 'red'
-    print0(pcolor('###### Pretrained {} loaded:'.format(prefixes[0]), base_color, attrs=attrs) +
-          pcolor(' {}/{} '.format(n, n_total), color, attrs=attrs) +
-          pcolor('tensors', base_color, attrs=attrs))
+    base_color, attrs = "cyan", ["bold", "dark"]
+    color = "green" if n == n_total else "yellow" if n > 0 else "red"
+    print0(
+        pcolor(
+            "###### Pretrained {} loaded:".format(prefixes[0]), base_color, attrs=attrs
+        )
+        + pcolor(" {}/{} ".format(n, n_total), color, attrs=attrs)
+        + pcolor("tensors", base_color, attrs=attrs)
+    )
     return network
 
 
@@ -178,21 +183,22 @@ def backwards_state_dict(state_dict):
         Updated model state dict with modified layer names
     """
     # List of layer names to change
-    changes = (('model.model', 'model'),
-               ('pose_network', 'pose_net'),
-               ('disp_network', 'depth_net'))
+    changes = (
+        ("model.model", "model"),
+        ("pose_network", "pose_net"),
+        ("disp_network", "depth_net"),
+    )
     # Iterate over all keys and values
     updated_state_dict = OrderedDict()
     for key, val in state_dict.items():
         # Ad hoc changes due to version changes
-        key = '{}.{}'.format('model', key)
-        if 'disp_network' in key:
-            key = key.replace('conv3.0.weight', 'conv3.weight')
-            key = key.replace('conv3.0.bias', 'conv3.bias')
+        key = "{}.{}".format("model", key)
+        if "disp_network" in key:
+            key = key.replace("conv3.0.weight", "conv3.weight")
+            key = key.replace("conv3.0.bias", "conv3.bias")
         # Change layer names
         for change in changes:
-            key = key.replace('{}.'.format(change[0]),
-                              '{}.'.format(change[1]))
+            key = key.replace("{}.".format(change[0]), "{}.".format(change[1]))
         updated_state_dict[key] = val
     # Return updated state dict
     return updated_state_dict
