@@ -9,7 +9,7 @@ sys.path.append(os.getcwd())
 
 from glob import glob
 from cv2 import imwrite
-import cv2
+
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.datasets.augmentations import resize_image, to_tensor
 from packnet_sfm.utils.horovod import hvd_init, rank, world_size, print0
@@ -18,7 +18,6 @@ from packnet_sfm.utils.config import parse_test_file
 from packnet_sfm.utils.load import set_debug
 from packnet_sfm.utils.depth import write_depth, inv2depth, viz_inv_depth
 from packnet_sfm.utils.logging import pcolor
-from PIL import Image
 
 
 def is_image(
@@ -100,20 +99,17 @@ def infer_and_save_depth(
 
     # Load image
     image = load_image(input_file)
-    print(image)
-    print(type(image))
     # Resize and to tensor
     image = resize_image(image, image_shape)
     image = to_tensor(image).unsqueeze(0)
+
     # Send image to GPU if available
     if torch.cuda.is_available():
         image = image.to("cuda:{}".format(rank()), dtype=dtype)
 
     # Depth inference (returns predicted inverse depth)
     pred_inv_depth = model_wrapper.depth(image)["inv_depths"][0]
-    print(pred_inv_depth)
-    print(type(pred_inv_depth))
-    print(inv2depth(pred_inv_depth))
+
     if save == "npz" or save == "png":
         # Get depth from predicted depth map and save to different formats
         filename = "{}.{}".format(os.path.splitext(output_file)[0], save)
@@ -124,20 +120,11 @@ def infer_and_save_depth(
             )
         )
         write_depth(filename, depth=inv2depth(pred_inv_depth))
-        # cv2.imshow("inv2",depth)
-        # cv2.waitKey(0)
     else:
         # Prepare RGB image
         rgb = image[0].permute(1, 2, 0).detach().cpu().numpy() * 255
-        print("RGB",rgb)
-        print(len(rgb))
-        print(type(rgb))
         # Prepare inverse depth
         viz_pred_inv_depth = viz_inv_depth(pred_inv_depth[0]) * 255
-        print("VIZ_pred",viz_pred_inv_depth)
-        print(len(viz_pred_inv_depth))
-
-        print(type(viz_pred_inv_depth))
         # Concatenate both vertically
         image = np.concatenate([rgb, viz_pred_inv_depth], 0)
         # Save visualization
@@ -147,10 +134,9 @@ def infer_and_save_depth(
                 pcolor(output_file, "magenta", attrs=["bold"]),
             )
         )
-        print("Imwrite")
         imwrite(output_file, image[:, :, ::-1])
-        cv2.imshow("RGB",rgb)
-        cv2.waitKey()
+
+
 def main(args):
 
     # Initialize horovod

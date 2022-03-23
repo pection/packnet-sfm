@@ -2,7 +2,9 @@
 
 import argparse
 import torch
-
+import os
+import sys
+sys.path.append(os.getcwd())
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.trainers.horovod_trainer import HorovodTrainer
 from packnet_sfm.utils.config import parse_test_file

@@ -1,15 +1,10 @@
-# Copyright 2020 Toyota Research Institute.  All rights reserved.
-
 import argparse
 import numpy as np
 import torch
 import os
 import sys
-sys.path.append(os.getcwd())
-
-from glob import glob
+from lob import glob
 from cv2 import imwrite
-import cv2
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.datasets.augmentations import resize_image, to_tensor
 from packnet_sfm.utils.horovod import hvd_init, rank, world_size, print0
@@ -18,78 +13,15 @@ from packnet_sfm.utils.config import parse_test_file
 from packnet_sfm.utils.load import set_debug
 from packnet_sfm.utils.depth import write_depth, inv2depth, viz_inv_depth
 from packnet_sfm.utils.logging import pcolor
-from PIL import Image
 
-
-def is_image(
-    file,
-    ext=(
-        ".png",
-        ".jpg",
-    ),
-):
-    """Check if a file is an image with certain extensions"""
-    return file.endswith(ext)
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="PackNet-SfM inference of depth maps from images"
-    )
-    parser.add_argument("--checkpoint", type=str, help="Checkpoint (.ckpt)")
-    parser.add_argument("--input", type=str, help="Input file or folder")
-    parser.add_argument("--output", type=str, help="Output file or folder")
-    parser.add_argument(
-        "--image_shape",
-        type=int,
-        nargs="+",
-        default=None,
-        help="Input and output image shape "
-        "(default: checkpoint's config.datasets.augmentation.image_shape)",
-    )
-    parser.add_argument("--half", action="store_true", help="Use half precision (fp16)")
-    parser.add_argument(
-        "--save",
-        type=str,
-        choices=["npz", "png"],
-        default=None,
-        help="Save format (npz or png). Default is None (no depth map is saved).",
-    )
-    args = parser.parse_args()
-    assert args.checkpoint.endswith(
-        ".ckpt"
-    ), "You need to provide a .ckpt file as checkpoint"
-    assert (
-        args.image_shape is None or len(args.image_shape) == 2
-    ), "You need to provide a 2-dimensional tuple as shape (H,W)"
-    assert (is_image(args.input) and is_image(args.output)) or (
-        not is_image(args.input) and not is_image(args.input)
-    ), "Input and output must both be images or folders"
-    return args
+sys.path.append(os.getcwd())
 
 
 @torch.no_grad()
 def infer_and_save_depth(
     input_file, output_file, model_wrapper, image_shape, half, save
 ):
-    """
-    Process a single input file to produce and save visualization
 
-    Parameters
-    ----------
-    input_file : str
-        Image file
-    output_file : str
-        Output file, or folder where the output will be saved
-    model_wrapper : nn.Module
-        Model wrapper used for inference
-    image_shape : Image shape
-        Input image shape
-    half: bool
-        use half precision (fp16)
-    save: str
-        Save format (npz or png)
-    """
     if not is_image(output_file):
         # If not an image, assume it's a folder and append the input name
         os.makedirs(output_file, exist_ok=True)
@@ -100,20 +32,17 @@ def infer_and_save_depth(
 
     # Load image
     image = load_image(input_file)
-    print(image)
-    print(type(image))
     # Resize and to tensor
     image = resize_image(image, image_shape)
     image = to_tensor(image).unsqueeze(0)
+
     # Send image to GPU if available
     if torch.cuda.is_available():
         image = image.to("cuda:{}".format(rank()), dtype=dtype)
 
     # Depth inference (returns predicted inverse depth)
     pred_inv_depth = model_wrapper.depth(image)["inv_depths"][0]
-    print(pred_inv_depth)
-    print(type(pred_inv_depth))
-    print(inv2depth(pred_inv_depth))
+
     if save == "npz" or save == "png":
         # Get depth from predicted depth map and save to different formats
         filename = "{}.{}".format(os.path.splitext(output_file)[0], save)
@@ -124,20 +53,11 @@ def infer_and_save_depth(
             )
         )
         write_depth(filename, depth=inv2depth(pred_inv_depth))
-        # cv2.imshow("inv2",depth)
-        # cv2.waitKey(0)
     else:
         # Prepare RGB image
         rgb = image[0].permute(1, 2, 0).detach().cpu().numpy() * 255
-        print("RGB",rgb)
-        print(len(rgb))
-        print(type(rgb))
         # Prepare inverse depth
         viz_pred_inv_depth = viz_inv_depth(pred_inv_depth[0]) * 255
-        print("VIZ_pred",viz_pred_inv_depth)
-        print(len(viz_pred_inv_depth))
-
-        print(type(viz_pred_inv_depth))
         # Concatenate both vertically
         image = np.concatenate([rgb, viz_pred_inv_depth], 0)
         # Save visualization
@@ -147,10 +67,9 @@ def infer_and_save_depth(
                 pcolor(output_file, "magenta", attrs=["bold"]),
             )
         )
-        print("Imwrite")
         imwrite(output_file, image[:, :, ::-1])
-        cv2.imshow("RGB",rgb)
-        cv2.waitKey()
+
+
 def main(args):
 
     # Initialize horovod
@@ -201,5 +120,4 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parse_args()
     main(args)

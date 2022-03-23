@@ -27,7 +27,7 @@ model:
         max_depth: 80.0
 datasets:
     augmentation:
-        image_shape: (192, 640)
+        image_shape: (384, 640)
     train:
         batch_size: 4
         dataset: ['KITTI']

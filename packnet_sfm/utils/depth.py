@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 from matplotlib.cm import get_cmap
-
+import cv2
 from packnet_sfm.utils.image import load_image, gradient_x, gradient_y, flip_lr, interpolate_image
 from packnet_sfm.utils.types import is_seq, is_tensor
 
@@ -58,11 +58,14 @@ def write_depth(filename, depth, intrinsics=None):
     elif filename.endswith('.png'):
         depth = transforms.ToPILImage()((depth * 256).int())
         depth.save(filename)
+
     # Something is wrong
+
     else:
         raise NotImplementedError('Depth filename not valid.')
-
-
+    cv2.imshow("Depth",depth)
+    cv2.waitKey()
+    print("Depth")
 def viz_inv_depth(inv_depth, normalizer=None, percentile=95,
                   colormap='plasma', filter_zeros=False):
     """

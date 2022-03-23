@@ -460,8 +460,6 @@ class ModelWrapper(torch.nn.Module):
             )
             print(run_line)
             print(hor_line)
-        mike = HorovodTrainer()
-        print(mike.get_avg())
         print("Writing csv file")
         writecsvfile("all_outputs.csv", self.output_dict)
 
