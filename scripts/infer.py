@@ -5,11 +5,11 @@ import numpy as np
 import torch
 import os
 import sys
-sys.path.append(os.getcwd())
 
-from glob import glob
-from cv2 import imwrite
+sys.path.append(os.getcwd())
 import cv2
+from glob import glob
+import matplotlib.pyplot as plt
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.datasets.augmentations import resize_image, to_tensor
 from packnet_sfm.utils.horovod import hvd_init, rank, world_size, print0
@@ -19,6 +19,8 @@ from packnet_sfm.utils.load import set_debug
 from packnet_sfm.utils.depth import write_depth, inv2depth, viz_inv_depth
 from packnet_sfm.utils.logging import pcolor
 from PIL import Image
+from numpy import asarray
+import numpy as np
 
 
 def is_image(
@@ -100,20 +102,18 @@ def infer_and_save_depth(
 
     # Load image
     image = load_image(input_file)
-    print(image)
-    print(type(image))
     # Resize and to tensor
     image = resize_image(image, image_shape)
+    print("IMAGE", type(image), image.shape)
     image = to_tensor(image).unsqueeze(0)
+
     # Send image to GPU if available
     if torch.cuda.is_available():
         image = image.to("cuda:{}".format(rank()), dtype=dtype)
 
     # Depth inference (returns predicted inverse depth)
     pred_inv_depth = model_wrapper.depth(image)["inv_depths"][0]
-    print(pred_inv_depth)
-    print(type(pred_inv_depth))
-    print(inv2depth(pred_inv_depth))
+
     if save == "npz" or save == "png":
         # Get depth from predicted depth map and save to different formats
         filename = "{}.{}".format(os.path.splitext(output_file)[0], save)
@@ -123,22 +123,39 @@ def infer_and_save_depth(
                 pcolor(filename, "magenta", attrs=["bold"]),
             )
         )
-        write_depth(filename, depth=inv2depth(pred_inv_depth))
-        # cv2.imshow("inv2",depth)
-        # cv2.waitKey(0)
+        # write_depth(filename, depth=inv2depth(pred_inv_depth))
     else:
         # Prepare RGB image
         rgb = image[0].permute(1, 2, 0).detach().cpu().numpy() * 255
-        print("RGB",rgb)
-        print(len(rgb))
-        print(type(rgb))
         # Prepare inverse depth
         viz_pred_inv_depth = viz_inv_depth(pred_inv_depth[0]) * 255
-        print("VIZ_pred",viz_pred_inv_depth)
-        print(len(viz_pred_inv_depth))
-
-        print(type(viz_pred_inv_depth))
         # Concatenate both vertically
+        print("viz_pred_inv_depth", viz_inv_depth(pred_inv_depth[0]))
+        cv2.imwrite("test.png", viz_pred_inv_depth)
+        cv2.imwrite(
+            "/home/ai/work/data/media/images_resize/frame_rgb_1.png", rgb[:, :, ::-1]
+        )
+        cv2.imwrite(
+            "/home/ai/work/data/media/images_resize/frame1_depth_1.png",
+            viz_pred_inv_depth[:, :, ::-1],
+        )
+        cv2.imwrite(
+            "/home/ai/work/data/media/images_resize/frame1_pred_1.png",
+            viz_pred_inv_depth,
+        )
+        print("viz_pred_inv_depth", viz_pred_inv_depth)
+        print("viz_pred_inv_depth", viz_pred_inv_depth.shape)
+        print("TYPE ", type(viz_pred_inv_depth))
+        # print(type(rgb))
+        # print(viz_pred_inv_depth)
+        # print(viz_pred_inv_depth[:, :, ::-1])
+        # print(viz_pred_inv_depth.shape)
+        # print(viz_pred_inv_depth[:, :, ::-1].shape)
+
+        # print(type(viz_pred_inv_depth))
+
+        img = convert(viz_pred_inv_depth[:, :, ::-1], 0, 255, np.uint8)
+        cv2.imshow("Window", img)
         image = np.concatenate([rgb, viz_pred_inv_depth], 0)
         # Save visualization
         print(
@@ -147,10 +164,35 @@ def infer_and_save_depth(
                 pcolor(output_file, "magenta", attrs=["bold"]),
             )
         )
-        print("Imwrite")
-        imwrite(output_file, image[:, :, ::-1])
-        cv2.imshow("RGB",rgb)
-        cv2.waitKey()
+        cv2.imwrite(output_file, image[:, :, ::-1])
+        # print(viz_pred_inv_depth.shape)
+        # image2 = Image.fromarray(viz_pred_inv_depth)
+        # print(type(image2))
+
+        # summarize image details
+        # print(image2.size)
+        # print(image2.mode)
+        # cv2.imshow("image", image[:, :, ::-1])
+        # cv2.imshow("rgb", rgb[:, :, ::-1])
+        # cv2.imshow("inv depth", viz_pred_inv_depth)
+        # plt.imshow(viz_pred_inv_depth[:, :, ::-1])
+        # plt.show()
+        cv2.waitKey(0)
+
+
+# img_n = cv2.normalize(src=img, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+
+def convert(img, target_type_min, target_type_max, target_type):
+    imin = img.min()
+    imax = img.max()
+
+    a = (target_type_max - target_type_min) / (imax - imin)
+    b = target_type_max - a * imax
+    new_img = (a * img + b).astype(target_type)
+    return new_img
+
+
 def main(args):
 
     # Initialize horovod

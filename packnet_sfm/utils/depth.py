@@ -58,7 +58,9 @@ def write_depth(filename, depth, intrinsics=None):
     elif filename.endswith('.png'):
         depth = transforms.ToPILImage()((depth * 256).int())
         depth.save(filename)
-
+        cv2.imshow("Depth",depth)
+        cv2.waitKey()
+        print("Depth222")
     # Something is wrong
 
     else:

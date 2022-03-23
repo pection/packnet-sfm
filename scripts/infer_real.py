@@ -1,10 +1,16 @@
+# Copyright 2020 Toyota Research Institute.  All rights reserved.
+
 import argparse
 import numpy as np
 import torch
 import os
 import sys
-from lob import glob
+
+sys.path.append(os.getcwd())
+import cv2
+from glob import glob
 from cv2 import imwrite
+import matplotlib.pyplot as plt
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.datasets.augmentations import resize_image, to_tensor
 from packnet_sfm.utils.horovod import hvd_init, rank, world_size, print0
@@ -13,15 +19,81 @@ from packnet_sfm.utils.config import parse_test_file
 from packnet_sfm.utils.load import set_debug
 from packnet_sfm.utils.depth import write_depth, inv2depth, viz_inv_depth
 from packnet_sfm.utils.logging import pcolor
+from PIL import Image
+from numpy import asarray
+import numpy as np
+import cv2
 
-sys.path.append(os.getcwd())
+
+def is_image(
+    file,
+    ext=(
+        ".png",
+        ".jpg",
+    ),
+):
+    """Check if a file is an image with certain extensions"""
+    return file.endswith(ext)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="PackNet-SfM inference of depth maps from images"
+    )
+    parser.add_argument("--checkpoint", type=str, help="Checkpoint (.ckpt)")
+    parser.add_argument("--input", type=str, help="Input file or folder")
+    parser.add_argument("--output", type=str, help="Output file or folder")
+    parser.add_argument(
+        "--image_shape",
+        type=int,
+        nargs="+",
+        default=None,
+        help="Input and output image shape "
+        "(default: checkpoint's config.datasets.augmentation.image_shape)",
+    )
+    parser.add_argument("--half", action="store_true", help="Use half precision (fp16)")
+    parser.add_argument(
+        "--save",
+        type=str,
+        choices=["npz", "png"],
+        default=None,
+        help="Save format (npz or png). Default is None (no depth map is saved).",
+    )
+    args = parser.parse_args()
+    assert args.checkpoint.endswith(
+        ".ckpt"
+    ), "You need to provide a .ckpt file as checkpoint"
+    assert (
+        args.image_shape is None or len(args.image_shape) == 2
+    ), "You need to provide a 2-dimensional tuple as shape (H,W)"
+    assert (is_image(args.input) and is_image(args.output)) or (
+        not is_image(args.input) and not is_image(args.input)
+    ), "Input and output must both be images or folders"
+    return args
 
 
 @torch.no_grad()
 def infer_and_save_depth(
     input_file, output_file, model_wrapper, image_shape, half, save
 ):
+    """
+    Process a single input file to produce and save visualization
 
+    Parameters
+    ----------
+    input_file : str
+        Image file
+    output_file : str
+        Output file, or folder where the output will be saved
+    model_wrapper : nn.Module
+        Model wrapper used for inference
+    image_shape : Image shape
+        Input image shape
+    half: bool
+        use half precision (fp16)
+    save: str
+        Save format (npz or png)
+    """
     if not is_image(output_file):
         # If not an image, assume it's a folder and append the input name
         os.makedirs(output_file, exist_ok=True)
@@ -32,9 +104,15 @@ def infer_and_save_depth(
 
     # Load image
     image = load_image(input_file)
-    # Resize and to tensor
+    # print("IMAGE", type(image), image.shape, image.shape)
     image = resize_image(image, image_shape)
+    print("IMAGE", type(image), image.size)
     image = to_tensor(image).unsqueeze(0)
+    print("IMAGE", type(image), image.size, image.shape)
+
+    # image2 = to_tensor(image)
+
+    # print("IMAGE", type(image), image.shape, image.shape)
 
     # Send image to GPU if available
     if torch.cuda.is_available():
@@ -52,13 +130,43 @@ def infer_and_save_depth(
                 pcolor(filename, "magenta", attrs=["bold"]),
             )
         )
-        write_depth(filename, depth=inv2depth(pred_inv_depth))
+        # write_depth(filename, depth=inv2depth(pred_inv_depth))
     else:
         # Prepare RGB image
         rgb = image[0].permute(1, 2, 0).detach().cpu().numpy() * 255
         # Prepare inverse depth
         viz_pred_inv_depth = viz_inv_depth(pred_inv_depth[0]) * 255
+        viz_pred_inv_depth_cv2 = viz_pred_inv_depth[:, :, ::-1]
         # Concatenate both vertically
+        print("viz_pred_inv_depth", viz_inv_depth(pred_inv_depth[0]))
+        cv2.imwrite("test.png", viz_pred_inv_depth)
+        cv2.imwrite(
+            "/home/ai/work/data/media/images_resize/frame_rgb_1.png", rgb[:, :, ::-1]
+        )
+        cv2.imwrite(
+            "/home/ai/work/data/media/images_resize/frame1_depth_1.png",
+            viz_pred_inv_depth[:, :, ::-1],
+        )
+        cv2.imwrite(
+            "/home/ai/work/data/media/images_resize/frame1_pred_1.png",
+            viz_pred_inv_depth,
+        )
+        print("viz_pred_inv_depth", viz_pred_inv_depth)
+        print("viz_pred_inv_depth", viz_pred_inv_depth.shape)
+        print("TYPE ", type(viz_pred_inv_depth))
+        # print(type(rgb))
+        # print(viz_pred_inv_depth)
+        # print(viz_pred_inv_depth[:, :, ::-1])
+        # print(viz_pred_inv_depth.shape)
+        # print(viz_pred_inv_depth[:, :, ::-1].shape)
+
+        # print(type(viz_pred_inv_depth))
+        img_n = convert_cv(viz_pred_inv_depth)
+        img_r = convert_cv(rgb)
+        # img = convert(viz_pred_inv_depth[:, :, ::-1], 0, 255, np.uint8)
+        cv2.imshow("Window", img_n)
+        cv2.imshow("Window2", img_r)
+
         image = np.concatenate([rgb, viz_pred_inv_depth], 0)
         # Save visualization
         print(
@@ -67,7 +175,44 @@ def infer_and_save_depth(
                 pcolor(output_file, "magenta", attrs=["bold"]),
             )
         )
-        imwrite(output_file, image[:, :, ::-1])
+        # cv2.imwrite(output_file, image[:, :, ::-1])
+        # print(viz_pred_inv_depth.shape)
+        # image2 = Image.fromarray(viz_pred_inv_depth)
+        # print(type(image2))
+
+        # summarize image details
+        # print(image2.size)
+        # print(image2.mode)
+        # cv2.imshow("image", image[:, :, ::-1])
+        # cv2.imshow("rgb", rgb[:, :, ::-1])
+        # cv2.imshow("inv depth", viz_pred_inv_depth)
+        # plt.imshow(viz_pred_inv_depth[:, :, ::-1])
+        # plt.show()
+        # cv2.waitKey(0)
+
+
+# img_n = cv2.normalize(src=img, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+
+def convert(img, target_type_min, target_type_max, target_type):
+    imin = img.min()
+    imax = img.max()
+
+    a = (target_type_max - target_type_min) / (imax - imin)
+    b = target_type_max - a * imax
+    new_img = (a * img + b).astype(target_type)
+    return new_img
+
+
+def convert_cv(img):
+    return cv2.normalize(
+        src=img,
+        dst=None,
+        alpha=0,
+        beta=255,
+        norm_type=cv2.NORM_MINMAX,
+        dtype=cv2.CV_8U,
+    )[:, :, ::-1]
 
 
 def main(args):
@@ -113,11 +258,37 @@ def main(args):
         files = [args.input]
 
     # Process each file
-    for fn in files[rank() :: world_size()]:
+    vid = cv2.VideoCapture(0)
+
+    while True:
+
+        # Capture the video frame
+        # by frame
+        ret, frame = vid.read()
+
+        # Display the resulting frame
+        cv2.imshow("frame", frame)
+        cv2.imwrite("test.png", frame)
         infer_and_save_depth(
-            fn, args.output, model_wrapper, image_shape, args.half, args.save
-        )
+            "test.png", args.output, model_wrapper, image_shape, args.half, args.save
+        )  # the 'q' button is set as the
+        # quitting button you may use any
+        # desired button of your choice
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+    # After the loop release the cap object
+    vid.release()
+    # Destroy all the windows
+    cv2.destroyAllWindows()
+
+    # for fn in files[rank() :: world_size()]:
+    #     infer_and_save_depth(
+    #         fn, args.output, model_wrapper, image_shape, args.half, args.save
+    #     )
 
 
 if __name__ == "__main__":
+    args = parse_args()
     main(args)
+#
