@@ -1,11 +1,12 @@
 # Copyright 2020 Toyota Research Institute.  All rights reserved.
-
-import argparse
-import numpy as np
-import torch
 import os
 import sys
+
 sys.path.append(os.getcwd())
+import argparse
+import numpy as np
+import os
+import torch
 
 from glob import glob
 from cv2 import imwrite

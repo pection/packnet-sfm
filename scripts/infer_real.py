@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import os
 import sys
+import time
 
 sys.path.append(os.getcwd())
 import cv2
@@ -136,7 +137,7 @@ def infer_and_save_depth(
         rgb = image[0].permute(1, 2, 0).detach().cpu().numpy() * 255
         # Prepare inverse depth
         viz_pred_inv_depth = viz_inv_depth(pred_inv_depth[0]) * 255
-        viz_pred_inv_depth_cv2 = viz_pred_inv_depth[:, :, ::-1]
+        viz_pred_inv_depth_cv2ZASSZXC = viz_pred_inv_depth[:, :, ::-1]
         # Concatenate both vertically
         print("viz_pred_inv_depth", viz_inv_depth(pred_inv_depth[0]))
         cv2.imwrite("test.png", viz_pred_inv_depth)
@@ -258,6 +259,10 @@ def main(args):
         files = [args.input]
 
     # Process each file
+    prev_frame_time = 0
+
+    # used to record the time at which we processed current frame
+    new_frame_time = 0
     vid = cv2.VideoCapture(0)
 
     while True:
@@ -268,6 +273,28 @@ def main(args):
 
         # Display the resulting frame
         cv2.imshow("frame", frame)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        # time when we finish processing for this frame
+        new_frame_time = time.time()
+
+        # Calculating the fps
+
+        # fps will be number of frame processed in given time frame
+        # since their will be most of time error of 0.001 second
+        # we will be subtracting it to get more accurate result
+        fps = 1 / (new_frame_time - prev_frame_time)
+        prev_frame_time = new_frame_time
+
+        # converting the fps into integer
+        fps = int(fps)
+
+        # converting the fps to string so that we can display it on frame
+        # by using putText function
+        fps = str(fps)
+
+        # putting the FPS count on the frame
+        cv2.putText(frame, fps, (7, 70), font, 3, (100, 255, 0), 3, cv2.LINE_AA)
+
         cv2.imwrite("test.png", frame)
         infer_and_save_depth(
             "test.png", args.output, model_wrapper, image_shape, args.half, args.save

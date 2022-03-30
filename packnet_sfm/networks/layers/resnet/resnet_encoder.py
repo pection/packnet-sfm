@@ -18,7 +18,7 @@ class ResNetMultiImageInput(models.ResNet):
     Adapted from https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
     """
     def __init__(self, block, layers, num_classes=1000, num_input_images=1):
-        super(ResNetMultiImageInput, self).__init__(block, layers)
+        super(ResNetMultiImageInput, scelf).__init__(block, layers)
         self.inplanes = 64
         self.conv1 = nn.Conv2d(
             num_input_images * 3, 64, kernel_size=7, stride=2, padding=3, bias=False)

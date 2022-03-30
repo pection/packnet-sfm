@@ -8,8 +8,9 @@ import sys
 
 sys.path.append(os.getcwd())
 import cv2
+
 from glob import glob
-import matplotlib.pyplot as plt
+
 from packnet_sfm.models.model_wrapper import ModelWrapper
 from packnet_sfm.datasets.augmentations import resize_image, to_tensor
 from packnet_sfm.utils.horovod import hvd_init, rank, world_size, print0
@@ -18,9 +19,6 @@ from packnet_sfm.utils.config import parse_test_file
 from packnet_sfm.utils.load import set_debug
 from packnet_sfm.utils.depth import write_depth, inv2depth, viz_inv_depth
 from packnet_sfm.utils.logging import pcolor
-from PIL import Image
-from numpy import asarray
-import numpy as np
 
 
 def is_image(
@@ -123,7 +121,7 @@ def infer_and_save_depth(
                 pcolor(filename, "magenta", attrs=["bold"]),
             )
         )
-        # write_depth(filename, depth=inv2depth(pred_inv_depth))
+        write_depth(filename, depth=inv2depth(pred_inv_depth))
     else:
         # Prepare RGB image
         rgb = image[0].permute(1, 2, 0).detach().cpu().numpy() * 255
@@ -146,18 +144,10 @@ def infer_and_save_depth(
         print("viz_pred_inv_depth", viz_pred_inv_depth)
         print("viz_pred_inv_depth", viz_pred_inv_depth.shape)
         print("TYPE ", type(viz_pred_inv_depth))
-        # print(type(rgb))
-        # print(viz_pred_inv_depth)
-        # print(viz_pred_inv_depth[:, :, ::-1])
-        # print(viz_pred_inv_depth.shape)
-        # print(viz_pred_inv_depth[:, :, ::-1].shape)
-
-        # print(type(viz_pred_inv_depth))
 
         img = convert(viz_pred_inv_depth[:, :, ::-1], 0, 255, np.uint8)
         cv2.imshow("Window", img)
         image = np.concatenate([rgb, viz_pred_inv_depth], 0)
-        # Save visualization
         print(
             "Saving {} to {}".format(
                 pcolor(input_file, "cyan", attrs=["bold"]),
@@ -165,22 +155,6 @@ def infer_and_save_depth(
             )
         )
         cv2.imwrite(output_file, image[:, :, ::-1])
-        # print(viz_pred_inv_depth.shape)
-        # image2 = Image.fromarray(viz_pred_inv_depth)
-        # print(type(image2))
-
-        # summarize image details
-        # print(image2.size)
-        # print(image2.mode)
-        # cv2.imshow("image", image[:, :, ::-1])
-        # cv2.imshow("rgb", rgb[:, :, ::-1])
-        # cv2.imshow("inv depth", viz_pred_inv_depth)
-        # plt.imshow(viz_pred_inv_depth[:, :, ::-1])
-        # plt.show()
-        cv2.waitKey(0)
-
-
-# img_n = cv2.normalize(src=img, dst=None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
 
 def convert(img, target_type_min, target_type_max, target_type):
